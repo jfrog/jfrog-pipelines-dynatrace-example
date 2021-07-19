@@ -1,0 +1,224 @@
+resources:
+  - name: helmGitHub
+    type: GitRepo
+    configuration:
+      gitProvider: {{ .Values.gitProvider }}  # Name of GitHub integration, which provides connectivity to GitHub repo
+      path: {{ .Values.repoPath }}            # GitHub Repo path, if path is modified, change the resource name as well
+      branches:
+        include: main
+      buildOn:
+        commit: true
+
+  - name: simpleDockerImage
+    type: Image
+    configuration:
+      registry: simplehelmDockerIntegration             # Name of Docker integration in Artifactory instance
+      sourceRepository: {{ .Values.sourceRepository }}  # Docker repository name
+      imageName: {{ .Values.imageName }}                # Docker image name
+      imageTag: ${run_number}
+
+  - name: simpleBuildInfo
+    type: BuildInfo
+    configuration:
+      sourceArtifactory: artifactoryIntegration         # Your Artifactory integration
+      buildName: SampleApp                              # The name of the application image
+      buildNumber: ${run_number}
+
+  - name: simpleHelmChartBuildInfo
+    type: BuildInfo
+    configuration:
+      sourceArtifactory: artifactoryIntegration         # Your Artifactory integration
+      buildName: SampleApp                              # The name of the application Helm chart
+      buildNumber: 0.0.0                                # Starting build number, the following will be 0.0.1
+
+  - name: simplehelmRepoChart
+    type: GitRepo
+    configuration:
+      gitProvider: {{ .Values.gitProvider }}  # Name of GitHub integration, which provides connectivity to GitHub repo
+      path: {{ .Values.repoPath }}            # GitHub Repo path
+      branches:
+        include: main
+      buildOn:
+        commit: true
+
+  - name: simplehelmChart
+    type: HelmChart
+    configuration:
+      sourceArtifactory: artifactoryIntegration       # Your Artifactory integration
+      repository: simplecharts                        # Helm chart repository in your Artifactory instance
+      chart: busybox                                  # The name of the Helm chart
+      version: 0.0.0                                  # Starting version, the following will be 0.0.1
+
+pipelines:
+  - name: dynatrace_demo_helm
+    configuration:
+      environmentVariables:
+        readOnly:
+          my_releaseName: "busybox${run_number}"
+    steps:
+      - name: build_image
+        type: DockerBuild
+        configuration:
+          affinityGroup: buildAndPush
+          integrations:
+            - name: artifactoryIntegration
+          inputResources:
+            - name: helmGitHub
+          dockerFileLocation: pipeline/dynatrace/       # Relative location of the Dockerfile in the GitHub repo
+          dockerFileName: Dockerfile
+          dockerImageName: {{ .Values.imageName }}
+          dockerImageTag: $run_number
+
+      - name: push_image
+        type: DockerPush
+        configuration:
+          affinityGroup: buildAndPush
+          autoPublishBuildInfo: true
+          integrations:
+            - name: artifactoryIntegration                  # Your Artifactory integration
+          targetRepository: {{ .Values.targetRepository }}  # Docker repository, where the image will be pushed
+          inputSteps:
+            - name: build_image
+          outputResources:
+            - name: simpleBuildInfo                         # Build info updated after the step execution
+            - name: simpleDockerImage                       # Docker image resource, created after the step execution
+
+      - name: helm_build
+        type: HelmPublish
+        configuration:
+          helmVersion: 3                                    # Use Helm version 3 to build the Helm chart
+          chartPath: pipeline/dynatrace/busybox/            # Path to the Helm chart folder in the repo
+          affinityGroup: helm_install
+          inputSteps:
+            - name: push_image
+          inputResources:
+            - name: simplehelmRepoChart
+              trigger: false
+          outputResources:
+            - name: simplehelmChart                        # Helm chart will be created and pushed to the repo, declared in simplehelmChart resource
+            - name: simpleHelmChartBuildInfo
+        execution:
+          onStart:
+            - echo "Start"
+
+      # Install Dynatrace agent on the cluster.
+      - name: install_oneAgent_operator
+        type: Bash
+        configuration:
+          affinityGroup: helm_install
+          integrations:
+            - name: k8sIntegration       # k8s integration, provides connectivity to the k8s cluster
+            - name: dynatraceIntegration # Generic integration, contains Dynatrace API Key and PAAS Token
+          inputSteps:
+            - name: helm_build
+        execution:
+          onStart:
+            - echo "Preparing for work..."
+          onExecute:
+            # Variables DT_URL, DT_API_TOKEN and DT_PAAS_TOKEN must be created in dynatraceIntegration (generic integration)
+            - echo "Installing and configuring OneAgent"
+            - export DT_URL=${int_dynatraceIntegration_DT_URL}
+            - echo $DT_URL
+            - kubectl config current-context
+            - export nsExist=`kubectl get ns | grep dynatrace | wc -l`
+            - echo $nsExist
+            - >-
+              if [[ "${nsExist}" =~ 0 ]];
+              then
+                kubectl create namespace dynatrace
+                kubectl apply -f https://github.com/Dynatrace/dynatrace-oneagent-operator/releases/latest/download/kubernetes.yaml
+                kubectl -n dynatrace create secret generic oneagent --from-literal="apiToken=${int_dynatraceIntegration_DT_API_TOKEN}" --from-literal="paasToken=${int_dynatraceIntegration_DT_PAAS_TOKEN}"
+                curl -o cr.yaml https://raw.githubusercontent.com/Dynatrace/dynatrace-oneagent-operator/master/deploy/cr.yaml
+                sed -i -e s/ENVIRONMENTID/${DT_URL}/g cr.yaml
+                kubectl apply -f cr.yaml
+                cat cr.yaml
+              fi
+              #- sed -i 's/apiUrl:.*/apiUrl:a/b.*'
+              ## configure cr.yaml file when we have all the data needed
+          onSuccess:
+            - echo "Dynatrace OneAgent has beed successfully installed"
+          onFailure:
+            - echo "Failure"
+
+      # Deploy Helm application to the cluster
+      - name: deploy_helm
+        type: HelmDeploy
+        configuration:
+          helmVersion: 3
+          affinityGroup: helm_install
+          releaseName: busybox${run_number}
+          integrations:
+            - name: k8sIntegration
+            - name: artifactoryIntegration
+          inputResources:
+            - name: simplehelmChart
+            - name: simpleDockerImage                   # This image will be used in the values.yaml file of the Helm chart
+          inputSteps:
+            - name: install_oneAgent_operator
+          valueFilePaths:
+            - values.yaml
+        execution:
+          onStart:
+            # Collecting the environment information from the cluster where the Helm chart is being deployed
+            - kubectl config current-context
+            - add_run_variables CLUSTER="$(kubectl config current-context)"
+            - add_run_variables RELEASE_NAME="${my_releaseName}"
+          onSuccess:
+            - kubectl get pods
+          onFailure:
+            - echo "Failure"
+
+      # Modify artifact properties with the information collected in the previous step
+      - name: modify_properties
+        type: Bash
+        configuration:
+          affinityGroup: helm_install
+          integrations:
+            - name: artifactoryIntegration
+          inputResources:
+            - name: simplehelmChart
+          inputSteps:
+            - name: deploy_helm
+        execution:
+          onStart:
+            - echo "Preparing for work..."
+          onExecute:
+            - echo "Modifying helm chart properties"
+            - echo "Set current time as a deployment time"
+            - TIME=$(date +%s)
+            - curl --location --request PUT "${int_artifactoryIntegration_url}/api/storage/simplecharts/busybox-${res_simplehelmChart_version}.tgz?properties=deployedOnCluster=${CLUSTER}%7ChelmInstallationName=${RELEASE_NAME}%7CdeploymentTimestamp=${TIME}" --header "Accept:application/json" --header "X-Jfrog-Art-Api:${int_artifactoryIntegration_apikey}"
+          onSuccess:
+            - echo "Check the artifact parameters"
+            - curl --location --request GET "${int_artifactoryIntegration_url}/api/storage/simplecharts/busybox-${res_simplehelmChart_version}.tgz?properties=helmInstallationName,chart.version,deployedOnCluster,deploymentTimestamp" --header "Accept:application/json" --header "X-Jfrog-Art-Api:${int_artifactoryIntegration_apikey}"
+          onFailure:
+            - echo "Failure"
+
+      # Create the deployment event on the Dynatrace side
+      - name: Dynatrace_deployment_event
+        type: Bash
+        configuration:
+          affinityGroup: helm_install
+          integrations:
+            - name: artifactoryIntegration
+            - name: dynatraceIntegration
+          inputResources:
+            - name: helmGitHub
+            - name: simplehelmChart
+          inputSteps:
+            - name: modify_properties
+        execution:
+          onStart:
+            - echo "Preparing for work..."
+          onExecute:
+            # Creates a deployment event object and calls the Dynatrace REST API to send the event to Dynatrace
+            - JSONOutput=$(curl --location --request GET "${int_artifactoryIntegration_url}/api/storage/simplecharts/busybox-${res_simplehelmChart_version}.tgz?properties=helmInstallationName,chart.version,deployedOnCluster,vcs.url" --header "Accept:application/json" --header "X-Jfrog-Art-Api:${int_artifactoryIntegration_apikey}" | jq .)
+            - echo $JSONOutput
+            - ChartVersion=$(echo $JSONOutput | jq '.properties."chart.version"[0]')
+            - HelmInstallationName=$(echo $JSONOutput | jq '.properties.helmInstallationName[0]')
+            - VCS_URL=$(echo $JSONOutput | jq '.properties."vcs.url"[0]')
+            - DeployedOnCluster=$(echo $JSONOutput | jq '.properties.deployedOnCluster[0]')
+            - curl -H 'Content-Type:application/json' --location --request POST "https://${int_dynatraceIntegration_DT_URL}.live.dynatrace.com/api/v1/events"  -H 'Accept:application/json' -HAuthorization:"Api-Token ${int_dynatraceIntegration_DT_API_TOKEN}" -d "{\"eventType\":\"CUSTOM_DEPLOYMENT\",\"attachRules\":{\"tagRule\":{\"meTypes\":\"SERVICE\",\"tags\":[{\"context\":\"CONTEXTLESS\",\"key\":\"JFrog\",\"value\":\"busybox\"}]}},\"deploymentName\":\"RuntimeDeployment\",\"deploymentVersion\":\"${res_simplehelmChart_aa_version}\",\"deploymentProject\":\"BusyBox-nginx\",\"source\":\"${int_artifactoryIntegration_url}\",\"customProperties\":{\"ChartVersion\":${ChartVersion},\"JFrogArtifactoryUrl\":\"${int_artifactoryIntegration_url}\",\"HelmInstallationName\":${HelmInstallationName},\"RunNumber\":\"${run_number}\",\"DeployedOnCluster\":${DeployedOnCluster},\"VCS_URL\":${VCS_URL},\"DockerImageName\":\"${build_image_dockerImageName}\"}}"
+          onSuccess:
+            - echo "Deployment event successfully sent"
+          onFailure:
+            - echo "Failure"

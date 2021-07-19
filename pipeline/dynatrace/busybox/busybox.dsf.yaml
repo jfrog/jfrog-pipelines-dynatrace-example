@@ -1,0 +1,72 @@
+# metadata -- add as many key/value pairs as you want
+metadata:
+  org: "example.com"
+  maintainer: "k8s-admin (me@example.com)"
+  description: "example Desired State File for demo purposes."
+
+certificates:
+  caClient: "./client.crt" # GCS bucket path
+  caCrt: "./ca.crt" # S3 bucket path
+  caKey: "./ca.key" # valid local file relative path
+
+# paths to the certificate for connecting to the cluster
+# You can skip this if you use Helmsman on a machine with kubectl already connected to your k8s cluster.
+# you have to use exact key names here : 'caCrt' for certificate and 'caKey' for the key and caClient for the client certificate
+
+settings:
+  kubeContext: "minikube" # will try connect to this context first, if it does not exist, it will be created using the details below
+  #username: "admin"
+  #password: "$K8S_PASSWORD" # the name of an environment variable containing the k8s password
+  #clusterURI: "$K8S_URI" # the name of an environment variable containing the cluster API
+  #clusterURI: "https://192.168.99.100:8443" # equivalent to the above
+  serviceAccount: "rmqhalmsman" # k8s serviceaccount must be already defined, validation error will be thrown otherwise
+  storageBackend: "secret" # default is configMap
+  #slackWebhook:  "$slack" # or your slack webhook url
+  #reverseDelete: false # reverse the priorities on delete
+
+# define your environments and their k8s namespaces
+namespaces:
+  rmq:
+    protected: false
+    installTiller: false
+    #tillerServiceAccount: "tiller-staging" # should already exist in the staging namespace
+    #caCert: "secrets/ca.cert.pem" # or an env var, e.g. "$CA_CERT_PATH"
+    #tillerCert: "secrets/tiller.cert.pem" # or S3 bucket s3://mybucket/tiller.crt
+    #tillerKey: "secrets/tiller.key.pem"  # or GCS bucket gs://mybucket/tiller.key
+    #clientCert: "secrets/helm.cert.pem"
+    #clientKey: "secrets/helm.key.pem"
+
+
+# define any private/public helm charts repos you would like to get charts from
+# syntax: repo_name: "repo_url"
+# only private repos hosted in s3 buckets are now supported
+helmRepos:
+  stable: "https://kubernetes-charts.storage.googleapis.com"
+  incubator: "http://storage.googleapis.com/kubernetes-charts-incubator"
+  mycharts: "s3://atanu-poc/helm/charts"
+  #myGCSrepo: "gs://my-GCS-private-repo/charts"
+
+# define the desired state of your applications helm charts
+# each contains the following:
+
+
+apps:
+
+    # jenkins will be deployed using the Tiller in the staging namespace
+    samplebusybox:
+      namespace: "rmq" # maps to the namespace as defined in namespaces above
+      enabled: true # change to false if you want to delete this app release empty: false:
+      chart: "mycharts/busybox" # changing the chart name means delete and recreate this chart
+      version: "0.1.0" # chart version
+      ### Optional values below
+      name: "samplebusybox" # should be unique across all apps
+      description: "sample busybox:"
+      valuesFile: "" # leaving it empty uses the default chart values
+      purge: false # will only be considered when there is a delete operation
+      test: false # run the tests when this release is installed for the first time only
+      protected: false
+      priority: -3
+      wait: true
+      tillerNamespace: "rmq" # which Tiller to use to deploy this release
+
+# See https://github.com/Praqma/helmsman/blob/master/docs/desired_state_specification.md#apps for more apps options
