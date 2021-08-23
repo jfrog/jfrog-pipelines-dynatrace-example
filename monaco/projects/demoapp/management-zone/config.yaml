@@ -1,0 +1,5 @@
+config:
+  - demoapp: "demoapp.json"
+
+demoapp:
+  - name: "demoapp"

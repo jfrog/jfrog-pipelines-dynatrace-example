@@ -1,0 +1,20 @@
+{
+  "enabled": true,
+  "name": "{{ .name }}",
+  "description": "",
+  "evaluatedPercentage": -1,
+  "errorBudget": -1,
+  "status": "SUCCESS",
+  "error": "NONE",
+  "useRateMetric": false,
+  "metricRate": "",
+  "metricNumerator": "builtin:service.errors.server.successCount",
+  "numeratorValue": -1,
+  "metricDenominator": "builtin:service.requestCount.server",
+  "denominatorValue": -1,
+  "target": 95,
+  "warning": 97,
+  "evaluationType": "AGGREGATE",
+  "timeframe": "-1d",
+  "filter": "mzName(\"{{ .mzname }}\"),type(\"SERVICE\")"
+}

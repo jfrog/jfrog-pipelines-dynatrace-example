@@ -1,0 +1,13 @@
+replicaCount: 1
+
+namespace: dev
+
+# these values are updating by the pipeline
+image: IMAGE_PLACEHOLDER
+imageTag: IMAGE_TAG_PLACEHOLDER
+
+imagePullPolicy: Always
+
+# regcred = kubectl secret name
+# https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+imagePullSecrets: regcred       

@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demoapp
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: demoapp
+      app.kubernetes.io/part-of: dynatrace-demos
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: demoapp
+        app.kubernetes.io/part-of: dynatrace-demos
+        app.kubernetes.io/name: DemoNodeJsApp
+        app.kubernetes.io/version: "{{ .Values.imageTag }}"
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/created-by: dynatrace-demos-user
+      annotations:
+        owner: Team Services
+        chat-channel: dev-team-services 
+    spec:
+      containers:
+      - name: demoapp
+        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy:  {{ .Values.imagePullPolicy }}
+        ports:
+        - containerPort: 8080
+          name: demoapp
+        env:
+        - name: DT_CUSTOM_PROP
+          value: "project=dynatrace-demos service=demoapp"
+      imagePullSecrets:
+      - name: {{ .Values.imagePullSecrets }}
