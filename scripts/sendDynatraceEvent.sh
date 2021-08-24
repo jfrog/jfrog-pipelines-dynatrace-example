@@ -21,7 +21,8 @@ PIPELINE_REPO=${9}
 JFROG_PIPELINE_NAME=${10}
 JFROG_RUN_NUMBER=${11}
 JFROG_PROJECT=${12}
-TAG_RULE="${13}"
+APP_URL=${13}
+TAG_RULE="${14}"
 
 DT_TAG_PROJECT=$DT_TAG_PROJECT
 DT_API_URL="$DT_BASEURL/api/v1/events"
@@ -30,6 +31,7 @@ DEPLOYMENT_NAME="Set $DEPLOYMENT_PROJECT to version $DEPLOYMENT_VERSION"
 echo "================================================================="
 echo "Sending Dynatrace Deployment event"
 echo "DT_API_URL          = $DT_API_URL"
+echo "DEPLOYMENT_PROJECT  = $DEPLOYMENT_PROJECT"
 echo "DEPLOYMENT_NAME     = $DEPLOYMENT_NAME"
 echo "DEPLOYMENT_VERSION  = $DEPLOYMENT_VERSION"
 echo "CI_BACK_LINK        = $CI_BACK_LINK"
@@ -40,6 +42,7 @@ echo "PIPELINE_REPO       = $PIPELINE_REPO"
 echo "JFROG_PIPELINE_NAME = $JFROG_PIPELINE_NAME"
 echo "JFROG_RUN_NUMBER    = $JFROG_RUN_NUMBER"
 echo "JFROG_PROJECT       = $JFROG_PROJECT"
+echo "APP_URL             = $APP_URL"
 echo "TAG_RULE            = $TAG_RULE"
 echo "================================================================="
 POST_DATA=$(cat <<EOF
@@ -48,7 +51,7 @@ POST_DATA=$(cat <<EOF
       "source" : "$SOURCE" ,
       "deploymentName" : "$DEPLOYMENT_NAME",
       "deploymentVersion" : "$DEPLOYMENT_VERSION",
-      "deploymentProject" : "$JFROG_PROJECT" ,
+      "deploymentProject" : "$DEPLOYMENT_PROJECT" ,
       "ciBackLink" : "$CI_BACK_LINK",
       "customProperties": {
           "JFrog Project" : "$JFROG_PROJECT",
@@ -56,7 +59,8 @@ POST_DATA=$(cat <<EOF
           "JFrog Run Number" : "$JFROG_RUN_NUMBER",
           "JFrog Pipeline Repo" : "$PIPELINE_REPO",
           "Image Name" : "$IMAGE_NAME",
-          "Helm Chart" : "$HELM_CHART"
+          "Helm Chart" : "$HELM_CHART",
+          "Application URL": "$APP_URL"
       },
       "attachRules" : {
             "tagRule" : ${TAG_RULE}

@@ -1,8 +1,6 @@
 # Overview
 
-Simple one page Node.JS app with built-in an option to slow down server-side code execution or to simulate failed requests.
-
-The app also comes with 4 built-in "feature" behaviors - meaning - if you launch the app and tell it to run as Feature 1, 2, 3 to show slightly different behavior. 
+This simple Node.JS app comes with built-in "feature" behaviors - meaning - if you launch the app and tell it to run as feature 1, 2, 3 to show slightly different behavior.  
 
 | Feature | Behavior |
 | ----- | --------- |
@@ -13,6 +11,8 @@ The app also comes with 4 built-in "feature" behaviors - meaning - if you launch
 As shown below, the web UI will change colors based on the enabled feature.
 
 ![app](../images/app.png)
+
+A feature is set using a Docker build argument that sets an environment variable the application code looks for. 
 
 # Development
 

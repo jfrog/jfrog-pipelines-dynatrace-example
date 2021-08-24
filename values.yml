@@ -1,0 +1,7 @@
+gitRepo:
+  path: dt-demos/jfrog-pipelines-dynatrace-example  # <-- replace 'dt-demos' with your github username or org name
+  gitProvider: githubIntegration                    
+  branch: demo
+
+image:
+  imageName: dynatracedemos.jfrog.io/art-docker-dynatrace/demoapp  # <-- replace 'dynatracedemos' with your Artifactory account name

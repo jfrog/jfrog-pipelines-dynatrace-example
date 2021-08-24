@@ -1,12 +1,14 @@
-resources:
+template: true
+valuesFilePath: ./values.yml
 
+resources:
   - name: gitRepo   
-    type: GitRepo         # GitRepo resource provides connectivity to the specified GitHub repo
+    type: GitRepo
     configuration:
-      gitProvider: githubIntegration                      
-      path: dt-demos/jfrog-pipelines-dynatrace-example    
+      gitProvider: {{ .Values.gitRepo.gitProvider }}                      
+      path: {{ .Values.gitRepo.path }}   
       branches:
-        include: demo
+        include: {{ .Values.gitRepo.branch }}   
       buildOn:
         commit: true
 
@@ -15,7 +17,7 @@ resources:
     configuration:
       registry: artifactoryIntegration                                    
       sourceRepository: default-docker-local                             
-      imageName: dynatracedemos.jfrog.io/art-docker-dynatrace/demoapp     
+      imageName: {{ .Values.image.imageName }}       
       imageTag: ${BUILD_NUMBER}
 
   - name: demoappBuildInfo
@@ -54,7 +56,7 @@ pipelines:
             - name: gitRepo
           dockerFileLocation: demoapp
           dockerFileName: Dockerfile
-          dockerImageName: dynatracedemos.jfrog.io/art-docker-dynatrace/demoapp
+          dockerImageName: {{ .Values.image.imageName }}
           dockerImageTag: ${BUILD_NUMBER}
           dockerOptions: --build-arg FEATURE_NUMBER=${FEATURE_NUMBER}
         execution:
@@ -68,7 +70,7 @@ pipelines:
           autoPublishBuildInfo: true
           integrations:
             - name: artifactoryIntegration                  
-          targetRepository: art-docker-dynatrace            
+          targetRepository: art-docker-dynatrace           
           inputSteps:
             - name: aDockerBuild
           outputResources:
@@ -141,10 +143,29 @@ pipelines:
           onExecute:
             - kubectl config current-context
             - APP_IP=$(kubectl -n dev get service demoapp -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
-            - APP_URL="http://${APP_IP}:8080"
+            - add_run_variables APP_URL="http://${APP_IP}:8080"
             - $res_gitRepo_resourcePath/scripts/appUpCheck.sh ${APP_URL}
 
-      - name: fConfigureDynatrace
+      - name: fModifyHelmChartProperties
+        type: Bash
+        configuration:
+          affinityGroup: Configuration
+          integrations:
+            - name: artifactoryIntegration
+          inputResources:
+            - name: demoappHelmChart
+            - name: gitRepo
+          inputSteps:
+            - name: eAppUpCheck
+        execution:
+          onExecute:
+            - JFROG_BASE_URL=${int_artifactoryIntegration_url}
+            - JFROG_API_KEY=${int_artifactoryIntegration_apikey}
+            - CHART_REPO=${res_demoappHelmChart_repository}
+            - add_run_variables CHART=demoapp-${res_demoappHelmChart_version}
+            - $res_gitRepo_resourcePath/scripts/updateHelmChartProperties.sh ${JFROG_BASE_URL} ${JFROG_API_KEY} ${CHART_REPO} ${CHART} ${CLUSTER}
+
+      - name: gConfigureDynatrace
         type: Bash
         configuration:
           affinityGroup: Configuration
@@ -155,31 +176,12 @@ pipelines:
           integrations:
             - name: dynatraceIntegration
           inputSteps:
-            - name: eAppUpCheck
+            - name: fModifyHelmChartProperties
         execution:
           onExecute:
             - DT_BASEURL=${int_dynatraceIntegration_DT_URL}
             - DT_API_TOKEN=${int_dynatraceIntegration_DT_API_TOKEN}
             - docker run -e DT_BASEURL=$DT_BASEURL -e DT_API_TOKEN=$DT_API_TOKEN -e NEW_CLI=1 -v $res_gitRepo_resourcePath:/monaco-mount/ dynatraceace/monaco-runner:release-v1.5.3 "monaco deploy -v --environments /monaco-mount/monaco/environments.yml --project demoapp /monaco-mount/monaco/projects"
-
-      - name: gModifyHelmChartProperties
-        type: Bash
-        configuration:
-          affinityGroup: Configuration
-          integrations:
-            - name: artifactoryIntegration
-          inputResources:
-            - name: demoappHelmChart
-            - name: gitRepo
-          inputSteps:
-            - name: fConfigureDynatrace
-        execution:
-          onExecute:
-            - JFROG_BASE_URL=${int_artifactoryIntegration_url}
-            - JFROG_API_KEY=${int_artifactoryIntegration_apikey}
-            - CHART_REPO=${res_demoappHelmChart_repository}
-            - add_run_variables CHART=demoapp-${res_demoappHelmChart_version}
-            - $res_gitRepo_resourcePath/scripts/updateHelmChartProperties.sh ${JFROG_BASE_URL} ${JFROG_API_KEY} ${CHART_REPO} ${CHART} ${CLUSTER}
 
       - name: hPostDynatraceEvent
         type: Bash
@@ -192,7 +194,7 @@ pipelines:
             - name: demoappHelmChart
             - name: demoappDockerImage
           inputSteps:
-            - name: gModifyHelmChartProperties
+            - name: gConfigureDynatrace
         execution:
           onExecute:
             - DT_BASEURL=${int_dynatraceIntegration_DT_URL}
@@ -208,4 +210,5 @@ pipelines:
             - JFROG_RUN_NUMBER=${run_number}
             - JFROG_PROJECT=${project_name}
             - TAG_RULE="{\"meTypes\":[\"PROCESS_GROUP_INSTANCE\"],\"tags\":[{\"context\":\"CONTEXTLESS\",\"key\":\"service\",\"value\":\"$DT_TAG_SERVICE\"},{\"context\":\"CONTEXTLESS\",\"key\":\"project\",\"value\":\"$DT_TAG_PROJECT\"},{\"context\":\"CONTEXTLESS\",\"key\":\"stage\",\"value\":\"$DT_TAG_STAGE\"}]}"
-            - $res_gitRepo_resourcePath/scripts/sendDynatraceEvent.sh ${DT_BASEURL} ${DT_API_TOKEN} ${DEPLOYMENT_PROJECT} ${DEPLOYMENT_VERSION} ${CI_BACK_LINK} ${SOURCE} ${IMAGE_NAME} ${HELM_CHART} ${PIPELINE_REPO} ${JFROG_PIPELINE_NAME} ${JFROG_RUN_NUMBER} ${JFROG_PROJECT} ${TAG_RULE}
+            - $res_gitRepo_resourcePath/scripts/sendDynatraceEvent.sh ${DT_BASEURL} ${DT_API_TOKEN} ${DEPLOYMENT_PROJECT} ${DEPLOYMENT_VERSION} ${CI_BACK_LINK} ${SOURCE} ${IMAGE_NAME} ${HELM_CHART} ${PIPELINE_REPO} ${JFROG_PIPELINE_NAME} ${JFROG_RUN_NUMBER} ${JFROG_PROJECT} ${APP_URL} ${TAG_RULE}
+            
