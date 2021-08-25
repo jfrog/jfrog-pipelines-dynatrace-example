@@ -1,0 +1,6 @@
+config:
+  - error-slo: "error-slo.json"
+
+error-slo:
+  - name: "Demo App Error Rate"
+  - mzname: "demoapp/management-zone/demoapp.name"

@@ -1,0 +1,4 @@
+workshop:
+    - name: "demoapp"
+    - env-url: "{{ .Env.DT_BASEURL }}"
+    - env-token-name: "DT_API_TOKEN"

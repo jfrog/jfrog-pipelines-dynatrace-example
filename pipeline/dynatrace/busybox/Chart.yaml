@@ -1,5 +1,0 @@
-apiVersion: v1
-appVersion: "1.1"
-description: A Helm chart for Kubernetes
-name: busybox
-version: 0.1.4
