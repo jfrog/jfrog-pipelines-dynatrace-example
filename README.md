@@ -1,6 +1,6 @@
 # Overview
 
-The repo contains a reference JFrog pipeline that showcases how to integrate [Dynatrace](https://www.dynatrace.com) into [JFrog software delivery pipelines](https://www.jfrog.com) for Kubernetes. To learn how to setup and use this reference pipeline, see the a detailed guide on the [JFrog Wiki]().
+The repo contains a reference JFrog pipeline that showcases how to integrate [Dynatrace](https://www.dynatrace.com) into [JFrog software delivery pipelines](https://www.jfrog.com) for Kubernetes. To learn how to setup and use this reference pipeline, see the a detailed guide on the [JFrog Wiki](https://www.JFrog.com/confluence/display/JFrog/JFrog+Partner+Integrations).
 
 ![app](./images/workflow.png)
 
