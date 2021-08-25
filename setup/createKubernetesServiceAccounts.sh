@@ -56,7 +56,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: teleport-role
+  name: dynatrace-role
 rules:
 - apiGroups:
   - "*"
@@ -105,11 +105,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: teleport-crb
+  name: dynatrace-crb
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: teleport-role
+  name: dynatrace-role
 subjects:
 - kind: ServiceAccount
   name: ${SA_NAME}
