@@ -43,7 +43,7 @@ pipelines:
           DT_TAG_PROJECT: "dynatrace-demos"
           DT_TAG_STAGE: "dev"
           DT_TAG_SERVICE: "demoapp"
-          FEATURE_NUMBER: "3"
+          FEATURE_NUMBER: "1"
 
     steps:
       - name: aDockerBuild
